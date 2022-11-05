@@ -8,7 +8,7 @@ ___
 
 完成intro、variables、functions、if、quiz1、primitive_types、vecs、move_semantics。
 
-* 其中主要对vecs有疑问。
+* 其中主要对vecs、move_semantics有疑问。
 
 ## 11月4日
 
@@ -18,3 +18,12 @@ ___
 
 * 其中主要对strings、options、box、arc、rc、cow、threads、traits有疑问。
 
+## 11月5日
+
+在准备考试，今天就晚上看了以下课程直播。解决了之前vecs、move_semantics的疑问。
+
+决定从今天开始每天设置一个目标，在第二天反馈目标完成情况。
+
+* 目标
+    * 看easy rust前20章，与配套视频。
+    * 重做rustlings，能做多少做多少。
