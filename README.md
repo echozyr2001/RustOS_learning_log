@@ -1,5 +1,69 @@
 # RustOS_learning_log
 
+## 11月10日
+
+**OS实验遇到的一些问题**
+
+**1. 第一章在提”供语义项 panic_handler“之后遇到报错。**
+
+```shell
+error: language item required, but not found: `eh_personality`
+```
+
+发现是由于在 `os` 目录下新建 `.cargo` 目录的时候，错误的将 `.cargo` 目录创建在`src`目录下了。
+
+**2. 没有找到命令`qemu-riscv64`。**
+
+由于在MacOS上使用`brew install qemu`安装qemu只有`qemu-system-riscv64`没有`qemu-riscv64`。目前没找到解决方法，但是也能正常进行实验。
+
+**3. 在实现rCore第一章过程中，`lang_item.rs`中代码报错找不到`prinln!`宏。**
+
+由于没有在`mod console`前面加上`#[macro_use]`导致`console.rs`中的宏没有被识别。
+
+**4. 报错`error[E0554]: #![feature] may not be used on the stable release channel`。**
+
+由于使用的`rustc`为stable版本，切换为`nighty`就可以了
+
+**5. 执行下列命令，生成的os.bin大小为0。**
+
+```shell
+rust-objcopy --strip-all target/riscv64gc-unknown-none-elf/release/os -O binary target/riscv64gc-unknown-none-elf/release/os.bin
+```
+发现是由于`entry.asm`修改之后没有保存。
+
+#### 总结
+
+训练营的OSLab代码前两章没有实验，于是clone了rCore的源码，参考手册完成了第一章的实验练习。更深入理解了操作系统的引导和执行。
+
+成功输出如下内容。
+
+```shell
+[rustsbi] RustSBI version 0.3.0-alpha.4, adapting to RISC-V SBI v1.0.0
+.______       __    __      _______.___________.  _______..______   __
+|   _  \     |  |  |  |    /       |           | /       ||   _  \ |  |
+|  |_)  |    |  |  |  |   |   (----`---|  |----`|   (----`|  |_)  ||  |
+|      /     |  |  |  |    \   \       |  |      \   \    |   _  < |  |
+|  |\  \----.|  `--'  |.----)   |      |  |  .----)   |   |  |_)  ||  |
+| _| `._____| \______/ |_______/       |__|  |_______/    |______/ |__|
+[rustsbi] Implementation     : RustSBI-QEMU Version 0.2.0-alpha.2
+[rustsbi] Platform Name      : riscv-virtio,qemu
+[rustsbi] Platform SMP       : 1
+[rustsbi] Platform Memory    : 0x80000000..0x88000000
+[rustsbi] Boot HART          : 0
+[rustsbi] Device Tree Region : 0x87e00000..0x87e00f85
+[rustsbi] Firmware Address   : 0x80000000
+[rustsbi] Supervisor Address : 0x80200000
+[rustsbi] pmp01: 0x00000000..0x80000000 (-wr)
+[rustsbi] pmp02: 0x80000000..0x80200000 (---)
+[rustsbi] pmp03: 0x80200000..0x88000000 (xwr)
+[rustsbi] pmp04: 0x88000000..0x00000000 (-wr)
+Hello, world!
+Panicked at src/main.rs:17 Shutdown machine!
+```
+
+* 目标
+    * 完成手册第二章的实验。
+
 ## 11月9日
 
 **看easy rust的一些记录**
