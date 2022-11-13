@@ -1,5 +1,43 @@
 # RustOS_learning_log
 
+## 11月13日
+
+参考了这片博客**[Rustle](https://medium.com/pragmatic-programmers/rustle-5c15d1c153a1)**复现了其中的`rustle`小程序。
+
+涉及到的不熟悉的知识点总结如下：
+
+### `.unwrap()`方法
+
+#### [unwrap in Rust](https://www.delftstack.com/howto/rust/rust-unwrap/#unwrap-in-rust)
+
+In Rust, to `unwrap` something means to issue the following command: “Give me the result of  the computation, and if there was an error, panic and stop the program.” Because unwrapping is such a straightforward process, it would be  beneficial for us to demonstrate the code for it.
+
+### `.nth()`方法
+
+#### [fn nth(&mut self, n: usize) -> Option\<Self::Item>](https://doc.rust-lang.org/std/iter/trait.Iterator.html#method.nth)
+
+Returns the `n`th element of the iterator.
+
+Like most indexing operations, the count starts from zero, so `nth(0)` returns the first value, `nth(1)` the second, and so on.
+
+Note that all preceding elements, as well as the returned element, will be consumed from the iterator. That means that the preceding elements will be discarded, and also that calling `nth(0)` multiple times on the same iterator will return different elements.
+
+`nth()` will return [`None`](https://doc.rust-lang.org/std/option/enum.Option.html#variant.None) if `n` is greater than or equal to the length of the iterator.
+
+### `.skip()`方法
+
+#### [fn skip(self, n: usize) -> Skip\<Self>](https://doc.rust-lang.org/std/iter/trait.Iterator.html#method.skip)
+
+Creates an iterator that skips the first `n` elements.
+
+`skip(n)` skips elements until `n` elements are skipped or the end of the iterator is reached (whichever happens first). After that, all the remaining elements are yielded. In particular, if the original iterator is too short, then the returned iterator is empty.
+
+Rather than overriding this method directly, instead override the `nth` method.
+
+### 第三方库`colored`和`bracket-random`
+
+第三方库相关API可以在这个网站查询到：https://docs.rs/。
+
 ## 11月12日
 
 用了半天，lab1根本没有思路……并且rust的使用上也有一点问题。决定回去看教学视频，跟着老师的进度走。
