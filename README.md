@@ -38,6 +38,9 @@ Rather than overriding this method directly, instead override the `nth` method.
 
 第三方库相关API可以在这个网站查询到：https://docs.rs/。
 
+* 目标：
+    * 继续rust学习，从项目入手。
+
 ## 11月12日
 
 用了半天，lab1根本没有思路……并且rust的使用上也有一点问题。决定回去看教学视频，跟着老师的进度走。
