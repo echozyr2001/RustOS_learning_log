@@ -1,5 +1,12 @@
 # RustOS_learning_log
 
+## 11月14日
+
+鸽了，什么也没做……
+
+* 目标：
+    * 继续rust学习，从项目入手。
+
 ## 11月13日
 
 参考了这片博客**[Rustle](https://medium.com/pragmatic-programmers/rustle-5c15d1c153a1)**复现了其中的`rustle`小程序。
