@@ -1,5 +1,14 @@
 # RustOS_learning_log
 
+## 11月17日
+
+* 一些记录
+    * RISC-V指令集和典型的CISC指令集的代表8051指令集相比：引入了指令长度编码；指令集规模较小，指令格式规整；每条指令实现单个功能；内存访问只能通过LOAD/STORE。
+    * RISC-V的官方标准分为用户指令集（User-Level Instruction Set Architecture）与特权架构（Privileged  Architecture）。其中，拥护指令集可以进一步分为基础整数指令集（Based Integer Instruction  Set）和扩展指令集(Extension)。
+    * RISC-V将用户指令集和特权架构分开的目的，是希望不同特权架构的处理器可以在ABI互相兼容。
+* 目标
+    * rCore第三章。
+
 ## 11月16日
 
 白天主要在上课和做作业，没有进行Rust的学习。
