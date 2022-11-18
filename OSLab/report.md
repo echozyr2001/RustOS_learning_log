@@ -168,3 +168,201 @@ RISC-V 架构中一共定义了 4 种特权级：
 在 Trap 触发的一瞬间， CPU 就会切换到 S 特权级并跳转到 `stvec` 所指示的位置。但是在正式进入 S 特权级的 Trap 处理之前，上面 提到过我们必须保存原控制流的寄存器状态，这一般通过内核栈来保存。注意，我们需要用专门为操作系统准备的内核栈，而不是应用程序运行时用到的用户栈。
 
 使用两个不同的栈主要是为了安全性：如果两个控制流（即应用程序的控制流和内核的控制流）使用同一个栈，在返回之后应用程序就能读到 Trap  控制流的历史信息，比如内核一些函数的地址，这样会带来安全隐患。于是，我们要做的是，在批处理操作系统中添加一段汇编代码，实现从用户栈切换到内核栈，并在内核栈上保存应用程序控制流的寄存器状态。
+
+
+
+
+
+## 任务的概念形成
+
+把应用程序的一次执行过程（也是一段控制流）称为一个 **任务** ，把应用执行过程中的一个时间片段上的执行片段或空闲片段称为 “ **计算任务片** ” 或“ **空闲任务片** ” 。当应用程序的所有任务片都完成后，应用程序的一次任务也就完成了。从一个程序的任务切换到另外一个程序的任务称为 **任务切换** 。为了确保切换后的任务能够正确继续执行，操作系统需要支持让任务的执行“暂停”和“继续”。
+
+一旦一条控制流需要支持“暂停-继续”，就需要提供一种**控制流切换的机制**，而且需要保证程序执行的控制流被切换出去之前和切换回来之后，能够继续正确执行。这需要让**程序执行的状态（也称上下文）**，即在执行过程中同步变化的资源（如寄存器、栈等）保持不变，或者变化在它的预期之内。不是所有的资源都需要被保存，事实上只有那些对于程序接下来的正确执行仍然有用，且在它被切换出去的时候有被覆盖风险的那些资源才有被保存的价值。这些需要保存与恢复的资源被称为 **任务上下文 (Task Context)**  。
+
+
+
+在前两章，我们已经看到了两种上下文保存/恢复的实例。让我们再来回顾一下它们：
+
+- 第一章“应用程序与基本执行环境”中，我们介绍了 [函数调用与栈](http://rcore-os.cn/rCore-Tutorial-Book-v3/chapter1/5support-func-call.html#term-function-call-and-stack) 。当时提到过，为了支持嵌套函数调用，不仅需要硬件平台提供特殊的跳转指令，还需要保存和恢复 [函数调用上下文](http://rcore-os.cn/rCore-Tutorial-Book-v3/chapter1/5support-func-call.html#term-function-context)  。注意在上述定义中，函数调用包含在普通控制流（与异常控制流相对）之内，且始终用一个固定的栈来保存执行的历史记录，因此函数调用并不涉及控制流的特权级切换。但是我们依然可以将其看成调用者和被调用者两个执行过程的“切换”，二者的协作体现在它们都遵循调用规范，分别保存一部分通用寄存器，这样的好处是编译器能够有足够的信息来尽可能减少需要保存的寄存器的数目。虽然当时用了很大的篇幅来说明，但其实整个过程都是编译器负责完成的，我们只需设置好栈就行了。
+- 第二章“批处理系统”中第一次涉及到了某种异常（Trap）控制流，即两条控制流的特权级切换，需要保存和恢复 [系统调用（Trap）上下文](http://rcore-os.cn/rCore-Tutorial-Book-v3/chapter2/4trap-handling.html#term-trap-context) 。当时，为了让内核能够 *完全掌控* 应用的执行，且不会被应用破坏整个系统，我们必须利用硬件提供的特权级机制，让应用和内核运行在不同的特权级。应用运行在 U 特权级，它所被允许的操作进一步受限，处处被内核监督管理；而内核运行在 S 特权级，有能力处理应用执行过程中提出的请求或遇到的状况。
+
+应用程序与操作系统打交道的核心在于硬件提供的 Trap 机制，也就是在 U 特权级运行的应用控制流和在 S 特权级运行的 Trap  控制流（操作系统的陷入处理部分）之间的切换。Trap 控制流是在 Trap  触发的一瞬间生成的，它和原应用控制流有着很密切的联系，因为它几乎唯一的目标就是处理 Trap 并恢复到原应用控制流。而且，由于 Trap  机制对于应用来说几乎是透明的，所以基本上都是 Trap 控制流在“负重前行”。Trap 控制流需要把 Trap  上下文（即几乎所有的通用寄存器）保存在自己的内核栈上，因为在 Trap 处理过程中所有的通用寄存器都可能被用到。可以回看 [Trap 上下文保存与恢复](http://rcore-os.cn/rCore-Tutorial-Book-v3/chapter2/4trap-handling.html#trap-context-save-restore) 小节。
+
+
+
+## 任务切换的设计与实现
+
+任务切换是来自两个不同应用在内核中的 Trap 控制流之间的切换。当一个应用 Trap 到 S 模式的操作系统内核中进行进一步处理（即进入了操作系统的 Trap 控制流）的时候，其 Trap 控制流可以调用一个特殊的 `__switch` 函数。这个函数表面上就是一个普通的函数调用：在 `__switch` 返回之后，将继续从调用该函数的位置继续向下执行。但是其间却隐藏着复杂的控制流切换过程。具体来说，调用 `__switch` 之后直到它返回前的这段时间，原 Trap 控制流 *A* 会先被暂停并被切换出去， CPU 转而运行另一个应用在内核中的 Trap 控制流 *B* 。然后在某个合适的时机，原 Trap 控制流 *A* 才会从某一条 Trap 控制流 *C* （很有可能不是它之前切换到的 *B* ）切换回来继续执行并最终返回。不过，从实现的角度讲， `__switch` 函数和一个普通的函数之间的核心差别仅仅是它会 **换栈** 。
+
+
+
+需要保存一个应用的更多信息，我们将它们都保存在一个名为 **任务控制块** (Task Control Block) 的数据结构中：
+
+```
+// os/src/task/task.rs
+
+#[derive(Copy, Clone)]
+pub struct TaskControlBlock {
+    pub task_status: TaskStatus,
+    pub task_cx: TaskContext,
+}
+```
+
+可以看到我们还在 `task_cx` 字段中维护了上一小节中提到的任务上下文。任务控制块非常重要，它是内核管理应用的核心数据结构。在后面的章节我们还会不断向里面添加更多内容，从而实现内核对应用更全面的管理。
+
+
+
+我们可以总结一下应用的运行状态变化图：
+
+![../_images/fsm-coop.png](http://rcore-os.cn/rCore-Tutorial-Book-v3/_images/fsm-coop.png)
+
+# 实现`fn sys_task_info(ti: *mut TaskInfo) -> isize`
+
+需求分析
+
+1. 让TASK_MANAGER拥有获取task状态的能力
+2. 让TASK_MANAGER拥有更新task状态的能力
+
+实现
+
+对TASK_MANAGER管理的每个task维护一个TaskInfo对象，每次syscall的时候进行记录
+
+因此需要给task对象加入一个全新的inner字段，维护该任务开始时间和系统调用情况
+
+```rust
+# task/task.rs
+
+// TaskInfo容器
+#[derive(Clone, Copy)]
+pub struct TaskInfoInner {
+    pub syscall_times: [u32; MAX_SYSCALL_NUM], // MAX_SYSCALL_NUM数据个数
+    pub start_time: usize,
+}
+
+#[derive(Copy, Clone)]
+/// task control block structure
+pub struct TaskControlBlock {
+    pub task_status: TaskStatus,
+    pub task_cx: TaskContext,
+    // LAB1: Add whatever you need about the Task.
+    // 维护TaskInfo对象
+    pub task_info_inner: TaskInfoInner,
+}
+```
+
+之后给TASK_MANAGER实现对TaskInfo的getter和setter
+
+```
+let mut inner = self.inner.exclusive_access();
+后面是什么意思？
+
+unfafe 是什么意思
+```
+
+
+
+```rust
+
+
+// LAB1: Try to implement your function to update or get task info!
+    // 实现对TaskInfo的getter和setter
+    fn set_syscall_times(&self, sys_call_id: usize) {
+        let mut inner = self.inner.exclusive_access();
+        let current_id = inner.current_task;
+        inner.tasks[current_id].task_info_inner.syscall_times[sys_call_id] += 1;
+        // 次数加一
+    }
+
+    fn get_curent_task_info(&self, ti: *mut TaskInfo) {
+        let inner = self.inner.exclusive_access();
+        let current_id = inner.current_task;
+        let TaskInfoInner {
+            syscall_times,
+            start_time,
+        } = inner.tasks[current_id].task_info_inner;
+
+        unsafe {
+            *ti = TaskInfo {
+                status: TaskStatus::Running,
+                syscall_times,
+                time: get_time() - start_time,
+            }
+        }
+    }
+```
+
+然后对外提供接口
+
+```rust
+// LAB1: Public functions implemented here provide interfaces.
+// You may use TASK_MANAGER member functions to handle requests.
+pub fn record_syscall(syscall_id: usize) {
+    TASK_MANAGER.set_syscall_times(syscall_id);
+}
+
+pub fn get_task_info(ti: *mut TaskInfo) {
+    TASK_MANAGER.get_curent_task_info(ti);
+}
+```
+
+注意修改报错
+
+添加三个使用
+
+```rust
+# task/mod.rs
+
+use self::task::TaskInfoInner;
+use crate::syscall::process::TaskInfo;
+use crate::timer::get_time;
+```
+
+添加task_info_inner的初始化
+
+```rust
+# task/mod.rs
+
+lazy_static! {
+    /// a `TaskManager` instance through lazy_static!
+    pub static ref TASK_MANAGER: TaskManager = {
+        let num_app = get_num_app();
+        let mut tasks = [TaskControlBlock {
+            task_cx: TaskContext::zero_init(),
+            task_status: TaskStatus::UnInit,
+            task_info_inner: TaskInfoInner {
+                syscall_times: [0;MAX_SYSCALL_NUM],
+                start_time: 0,
+            }
+        }; MAX_APP_NUM];
+        for (i, t) in tasks.iter_mut().enumerate().take(num_app) {
+            t.task_cx = TaskContext::goto_restore(init_app_cx(i));
+            t.task_status = TaskStatus::Ready;
+        }
+        TaskManager {
+            num_app,
+            inner: unsafe {
+                UPSafeCell::new(TaskManagerInner {
+                    tasks,
+                    current_task: 0,
+                })
+            },
+        }
+    };
+}
+```
+
+修改TaskInfo属性为pub
+
+```rust
+# syscall/process.rs
+
+// 修改为pub
+pub struct TaskInfo {
+    pub status: TaskStatus,
+    pub syscall_times: [u32; MAX_SYSCALL_NUM],
+    pub time: usize,
+}
+```
+
+
+

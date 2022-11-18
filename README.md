@@ -1,5 +1,39 @@
 # RustOS_learning_log
 
+## 11月18日
+
+今天继续进行rCore实验1。经过一下午的努力，还有两个测试点不通过。
+
+```shell
+[PASS] found <Hello, world from user mode program!>
+[PASS] found <Test power_3 OK18591!>
+[PASS] found <Test power_5 OK18591!>
+[PASS] found <Test power_7 OK18591!>
+[PASS] found <get_time OK18591! (\d+)>
+[PASS] found <Test sleep OK18591!>
+[PASS] found <current time_msec = (\d+)>
+[PASS] found <time_msec = (\d+) after sleeping (\d+) ticks, delta = (\d+)ms!>
+[PASS] found <Test sleep1 passed18591!>
+[PASS] found <Test write A OK18591!>
+[PASS] found <Test write B OK18591!>
+[PASS] found <Test write C OK18591!>
+[FAIL] not found <string from task info test>
+[FAIL] not found <Test task info OK18591!>
+[PASS] not found <FAIL: T.T>
+```
+
+从这句来看应该是时间的问题
+
+```shell
+Panicked at src/bin/ch3_taskinfo.rs:26, assertion failed: t2 - t1 <= info.time + 1
+```
+
+明天再继续解决这个问题。
+
+* 目标
+    * 解决今天遇到的问题，完成实验1。
+    * 整理之前的内容。
+
 ## 11月17日
 
 * 一些记录
