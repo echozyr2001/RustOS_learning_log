@@ -216,151 +216,104 @@ pub struct TaskControlBlock {
 
 ![../_images/fsm-coop.png](http://rcore-os.cn/rCore-Tutorial-Book-v3/_images/fsm-coop.png)
 
-# 实现`fn sys_task_info(ti: *mut TaskInfo) -> isize`
 
-需求分析
 
-1. 让TASK_MANAGER拥有获取task状态的能力
-2. 让TASK_MANAGER拥有更新task状态的能力
 
-实现
 
-对TASK_MANAGER管理的每个task维护一个TaskInfo对象，每次syscall的时候进行记录
+# Lab1
 
-因此需要给task对象加入一个全新的inner字段，维护该任务开始时间和系统调用情况
+## 实现fn sys_task_info(ti *mut TaskInfo) -> isize
+
+### 需求分析
+
+该系统调用需要能够查询当前正在执行的任务信息，包括**任务状态**、**任务使用的系统调用以及调用次数**、**任务运行的总时长**。
+
+ ```rust
+struct TaskInfo {
+    status: TaskStatus,
+    syscall_times: [u32; MAX_SYSCALL_NUM],
+    time: usize
+}
+ ```
+
+从上面的描述中，我们可以获取以下信息：
+
+1. 正在运行的任务表示任务状态一定是Running。
+2. 每个Task至少需要增加`syscall_times`字段和`time`字段。
+3. 从`syscall_times`的定义可以看出，是在提示我们用`syscall`的`id`做索引来统计对应系统调用的调用次数。
+4. 可以使用TaskManager来维护TaskInfo信息。
+
+
+
+由于任务状态一定是Running因此可以不用记录直接赋值；
+
+为了记录任务总运行时间，我们可以记录任务开始的时间，然后用任务结束的时间减去任务开始的时间即可。
+
+综上所述，我们需要记录的就是任务使用的系统调用以及调用次数syscall_times和任务开始的时间start_time，可以参考TaskManager将syscall_times和start_time封装成TaskInfoInner。
 
 ```rust
-# task/task.rs
-
-// TaskInfo容器
 #[derive(Clone, Copy)]
 pub struct TaskInfoInner {
-    pub syscall_times: [u32; MAX_SYSCALL_NUM], // MAX_SYSCALL_NUM数据个数
-    pub start_time: usize,
+  pub syscall_times: [u32; MAX_SYSCALL_NUM],
+  pub start_time: usize,
 }
+```
 
-#[derive(Copy, Clone)]
-/// task control block structure
+然后给Task对象加入一个task_info_inner字段。
+
+```rust
 pub struct TaskControlBlock {
     pub task_status: TaskStatus,
     pub task_cx: TaskContext,
-    // LAB1: Add whatever you need about the Task.
-    // 维护TaskInfo对象
+    // 添加
     pub task_info_inner: TaskInfoInner,
 }
 ```
 
-之后给TASK_MANAGER实现对TaskInfo的getter和setter
-
-```
-let mut inner = self.inner.exclusive_access();
-后面是什么意思？
-
-unfafe 是什么意思
-```
-
-
+之后给TaskManager实现对TaskInfo的getter和setter
 
 ```rust
+// 调用系统调用，记录次数
+fn set_syscall_times(&self, sys_call_id: usize) {..}
 
+// 拿到当前task的TaskInfo
+fn get_current_task_info(&self) -> TaskInfo {..}
 
-// LAB1: Try to implement your function to update or get task info!
-    // 实现对TaskInfo的getter和setter
-    fn set_syscall_times(&self, sys_call_id: usize) {
-        let mut inner = self.inner.exclusive_access();
-        let current_id = inner.current_task;
-        inner.tasks[current_id].task_info_inner.syscall_times[sys_call_id] += 1;
-        // 次数加一
-    }
-
-    fn get_curent_task_info(&self, ti: *mut TaskInfo) {
-        let inner = self.inner.exclusive_access();
-        let current_id = inner.current_task;
-        let TaskInfoInner {
-            syscall_times,
-            start_time,
-        } = inner.tasks[current_id].task_info_inner;
-
-        unsafe {
-            *ti = TaskInfo {
-                status: TaskStatus::Running,
-                syscall_times,
-                time: get_time() - start_time,
-            }
-        }
-    }
+// start_time在task初始化时赋值
+lazy_static! {
+  ..
+  task_info_inner: TaskInfoInner {
+    syscall_times: [0; MAX_SYSCALL_NUM],
+    start_time: get_time_ms(),
+  }
+  ..
+}
 ```
 
-然后对外提供接口
+然后对外部提供接口
 
 ```rust
-// LAB1: Public functions implemented here provide interfaces.
-// You may use TASK_MANAGER member functions to handle requests.
 pub fn record_syscall(syscall_id: usize) {
     TASK_MANAGER.set_syscall_times(syscall_id);
 }
 
-pub fn get_task_info(ti: *mut TaskInfo) {
-    TASK_MANAGER.get_curent_task_info(ti);
+pub fn get_task_info() -> TaskInfo {
+    TASK_MANAGER.get_current_task_info()
 }
 ```
 
-注意修改报错
-
-添加三个使用
+最后在使用系统调用的时候记录，并且完善目的系统调用
 
 ```rust
-# task/mod.rs
-
-use self::task::TaskInfoInner;
-use crate::syscall::process::TaskInfo;
-use crate::timer::get_time;
-```
-
-添加task_info_inner的初始化
-
-```rust
-# task/mod.rs
-
-lazy_static! {
-    /// a `TaskManager` instance through lazy_static!
-    pub static ref TASK_MANAGER: TaskManager = {
-        let num_app = get_num_app();
-        let mut tasks = [TaskControlBlock {
-            task_cx: TaskContext::zero_init(),
-            task_status: TaskStatus::UnInit,
-            task_info_inner: TaskInfoInner {
-                syscall_times: [0;MAX_SYSCALL_NUM],
-                start_time: 0,
-            }
-        }; MAX_APP_NUM];
-        for (i, t) in tasks.iter_mut().enumerate().take(num_app) {
-            t.task_cx = TaskContext::goto_restore(init_app_cx(i));
-            t.task_status = TaskStatus::Ready;
-        }
-        TaskManager {
-            num_app,
-            inner: unsafe {
-                UPSafeCell::new(TaskManagerInner {
-                    tasks,
-                    current_task: 0,
-                })
-            },
-        }
-    };
+pub fn syscall(syscall_id: usize, args: [usize; 3]) -> isize {
+    ..
+    set_syscall_times(syscall_id);
+    ..
 }
-```
 
-修改TaskInfo属性为pub
-
-```rust
-# syscall/process.rs
-
-// 修改为pub
-pub struct TaskInfo {
-    pub status: TaskStatus,
-    pub syscall_times: [u32; MAX_SYSCALL_NUM],
-    pub time: usize,
+pub fn sys_task_info(ti: *mut TaskInfo) -> isize {
+    unsafe { *ti = get_task_info() }
+    0
 }
 ```
 
